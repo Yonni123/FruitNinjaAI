@@ -116,15 +116,6 @@ renderObjects = function( renderList, scene, camera ) {
 	}
 ```
 ```js
-// Start recording dataset samples at regular interval
-recording = setInterval(() => {
-    window.recordSample = true;
-}, 1000);	//Once every second
-
-// Stop recording
-clearInterval(recording);
-```
-```js
 renderer.postRender = function ()
     {
         if (this.contextLost) { return; }
@@ -149,9 +140,10 @@ renderer.postRender = function ()
         }
 
         const phasercanv = document.querySelector("#enable3d-phaser-canvas");
+        const mainCanv = document.querySelector("#enable3d-three-canvas")
         if (phasercanv && window.saveFullFrame) {
             window.saveFullFrame = false;
-            window.frameName = window.frameNumber + "-EntireFrame";
+            window.frameName = window.frameNumber + "-x-EntireFrame";
             window.recordSample = false;
 
             const imageURL = phasercanv.toDataURL("image/png");
@@ -163,5 +155,31 @@ renderer.postRender = function ()
             window.frameNumber++;
             window.seq = 0;
         }
+        if (mainCanv && window.saveFullFrame) {
+            window.frameName = window.frameNumber + "-x-EntireFrameAgain";
+            const imageURL = mainCanv.toDataURL("image/png");
+            const downloadLink = document.createElement('a');
+            downloadLink.href = imageURL;
+            downloadLink.download =  window.frameName;
+            downloadLink.click();
+        }
     }
+```
+```js
+window.mainS = this
+```
+```js
+setInterval(() => {
+    if(window.mainS.gameState == 2){
+        window.recordSample = true;
+    }
+}, 500);
+
+// Start recording dataset samples at regular interval
+window.recording = setInterval(() => {
+    window.recordSample = true;
+}, 500);	//Once every second
+
+// Stop recording
+clearInterval(recording);
 ```

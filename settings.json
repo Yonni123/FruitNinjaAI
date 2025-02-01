@@ -1,0 +1,10 @@
+{
+    "settings": {
+        "datasetRootPath": "D:/FruitNinjaDataset",
+        "logLevel": "info",
+        "imageFormat": "png",
+        "maxDatasetSize": 1000,
+        "batchSize": 32,
+        "enableLogging": true
+    }
+}

@@ -70,6 +70,28 @@ def separate_images(frame_path):
         mask = res.split()[3]
         mask.save(os.path.join(classes_path, files[i]))
 
+    bomb = next((f for f in files if "bomb." in f), None)
+    bombOutline = next((f for f in files if "bombO" in f), None)
+    if bomb and bombOutline:    # We need to combine their masks
+        bombPath = os.path.join(classes_path, bomb)
+        bombOPath = os.path.join(classes_path, bombOutline)
+        bombImg = Image.open(bombPath).convert("RGBA")
+        bombOImg = Image.open(bombOPath).convert("RGBA")
+
+        os.remove(bombPath)
+        os.remove(bombOPath)
+
+        bombArray = np.array(bombImg)
+        bombOArray = np.array(bombOImg)
+        bombMask = bombArray[:, :, 0] > 128
+        bombOMask = bombOArray[:, :, 0] > 128
+
+        combinedMask = np.logical_or(bombMask, bombOMask).astype(np.uint8) * 255
+        combinedImage = Image.fromarray(combinedMask, mode="L")
+        combinedImage.save(os.path.join(classes_path, "x-x-bomb.png"))
+
+    
+
 def print_progress_bar(iteration, total, length=50, additional = ""):
     percent = (iteration + 1) / total
     bar_length = int(length * percent)

@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from PIL import Image
+from common import print_progress_bar
 
 
 def remove_background(img_path, bg_color=(252, 180, 191, 255)):
@@ -11,19 +12,11 @@ def remove_background(img_path, bg_color=(252, 180, 191, 255)):
     img_array[mask] = [0, 0, 0, 0]
     Image.fromarray(img_array).save(img_path)
 
-def print_progress_bar(iteration, total, length=50, additional = ""):
-    percent = (iteration + 1) / total
-    bar_length = int(length * percent)
-    bar = "#" * bar_length + "-" * (length - bar_length)
-    print(f"\rProcessing Frames: [{bar}] {percent*100:.2f}% ({iteration+1}/{total}) {additional}", end='', flush=True)
 
-
-with open("../settings.json", "r") as file:
-    settings = json.load(file)["settings"]
-dataset_root_path = settings.get("datasetRootPath")
-dataset_sort = os.path.join(dataset_root_path, "sorted")
-
-if dataset_sort and os.path.exists(dataset_sort):
+def segment_images(dataset_sort):
+    if not dataset_sort or not os.path.exists(dataset_sort):
+        raise NotADirectoryError("The dataset root path is either missing or invalid in the JSON file.")
+    
     frames = [entry for entry in os.listdir(dataset_sort) if os.path.exists(os.path.join(dataset_sort, entry))]
     total = len(frames)
     for i, f in enumerate(frames):
@@ -37,7 +30,16 @@ if dataset_sort and os.path.exists(dataset_sort):
                 continue
             remove_background(img_path)
     print("")
-    
-    print("Images have been segmented successfully.")
-else:
-    print("The dataset root path is either missing or invalid in the JSON file.")
+
+
+if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(script_dir, ".."))
+    res_dir = os.path.abspath(os.path.join(script_dir, "resource"))
+    bg_dir = os.path.abspath(os.path.join(res_dir, "foreground.png"))
+
+    with open(os.path.join(root_dir, "settings.json"), "r") as file:
+        settings = json.load(file)["settings"]
+    dataset_root_path = settings.get("datasetRootPath")
+    dataset_sort = os.path.join(dataset_root_path, "sorted")
+    segment_images(dataset_sort)

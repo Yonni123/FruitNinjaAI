@@ -26,7 +26,7 @@ class BackgroundGen:
         self.__background = np.array(Image.open(os.path.join(resource_path, background[0])))
         self.__splashes = [np.array(Image.open(os.path.join(resource_path, splash))) for splash in splash_files]
 
-    def apply_random_splashes(self, num_splashes=3):
+    def generate_background(self, num_splashes=3):
         background_img = self.__background.copy()  # Start with the original background as a numpy array
         
         # Apply splashes
@@ -51,12 +51,12 @@ class BackgroundGen:
                     splash_alpha * splash_img[:, :, c]
                 )
 
-        return Image.fromarray(background_img)
+        return background_img
 
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     res_dir = os.path.abspath(os.path.join(script_dir, "resource"))
     bgg = BackgroundGen(resource_path=res_dir)
-    final_background = bgg.apply_random_splashes()
+    final_background = Image.fromarray(bgg.generate_background())
     final_background.show()

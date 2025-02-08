@@ -80,6 +80,24 @@ renderObjects = function( renderList, scene, camera ) {
             renderList.unshift(item26); // Add it to the start of the list
         }
 
+        const indexBomb = renderList.findIndex(item => item.object.name === "bomb");
+        let bomb = null;
+        if (indexBomb !== -1) {
+            bomb = renderList.splice(indexBomb, 1)[0];  // Remove "bomb" and store it
+        }
+        
+        // Find and remove "bombOutline" if it exists
+        const indexBombO = renderList.findIndex(item => item.object.name === "bombOutline");
+        let bombOutline = null;
+        if (indexBombO !== -1) {
+            bombOutline = renderList.splice(indexBombO, 1)[0];  // Remove "bombOutline" and store it
+        }
+        
+        // Ensure both are added at the end of the list (next to each other)
+        if (bomb) renderList.push(bomb);  // Add "bomb" to the end
+        if (bombOutline) renderList.push(bombOutline);  // Add "bombOutline" to the end
+
+
 		for ( let i = 0, l = renderList.length; i < l; i ++ ) {
 			const renderItem = renderList[ i ];
 

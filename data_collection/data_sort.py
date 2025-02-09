@@ -27,7 +27,6 @@ def sort_data(dataset_raw, dataset_sort, foreground=None, remove_corrupted_image
 
     # Filter the files
     filtered_grouped_files = {}
-    needs_foreground = {}
     for frame, files in grouped_files.items():
         if len(files) == 0:
             continue
@@ -41,10 +40,9 @@ def sort_data(dataset_raw, dataset_sort, foreground=None, remove_corrupted_image
         
         for i in range(1, len(files)):  
             if extract_seq(files[i]) != extract_seq(files[i - 1]) + 1:
-                if extract_seq(files[i]) == float('inf'):
-                    continue
-                del filtered_grouped_files[frame]  # Remove the entire group
-                break
+                if extract_seq(files[i]) != float('inf'):
+                    del filtered_grouped_files[frame]  # Remove the entire group
+                    break
             filtered_grouped_files[frame].append(files[i])
     
     # Create a folder for each FRAME and move the files into the corresponding folder

@@ -24,7 +24,7 @@ def create_image(bgg, frame_path):
     img_path = os.path.join(frame_path, "final_image.png")
     final_img.save(img_path)
 
-def create_images(dataset_sort):
+def create_images(dataset_sort, res_dir):
     if not dataset_sort or not os.path.exists(dataset_sort):
         raise NotADirectoryError("The dataset root path is either missing or invalid in the JSON file.")
 
@@ -49,4 +49,4 @@ if __name__ == "__main__":
         settings = json.load(file)["settings"]
     dataset_root_path = settings.get("datasetRootPath")
     dataset_sort = os.path.join(dataset_root_path, "sorted")
-    create_images(dataset_sort)
+    create_images(dataset_sort, res_dir)

@@ -25,6 +25,9 @@ def segment_images(dataset_sort):
         files = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))]
         for f in files:
             img_path = os.path.join(dir_path, f)
+            sequence = f.split('-')
+            if len(sequence) != 3:
+                continue
             sequence = f.split('-')[1]
             if sequence == "x": # The last frame is already transparent
                 continue

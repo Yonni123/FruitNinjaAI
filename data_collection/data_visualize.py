@@ -45,7 +45,7 @@ def visualize_dataset(dataset_dir, disable_background=False, num_samples=2, max_
         "lemon": (255, 255, 102),       # Light Yellow
         "coconut": (139, 69, 19),       # Brown
         "pineapple": (204, 174, 0),     # Darker Golden Yellow
-        "apple": (55, 71, 0),           # Apple Green
+        "apple": (55, 171, 0),           # Apple Green
         "kiwi": (85, 107, 47),          # Dark Olive Green
         "peach": (255, 180, 130),       # Soft Orange-Pink
         "mango": (255, 130, 0)          # Rich Yellow-Orange
@@ -86,13 +86,24 @@ def visualize_dataset(dataset_dir, disable_background=False, num_samples=2, max_
 
             # Overlay mask
             color = __get_fruit_color(class_name, mask_colors)
-            boxed_overlay[mask > 0] = overlay[mask > 0] * (1 - alpha) + color * alpha
+            mask_indices = mask > 0
+
+            # Blend colors instead of overwriting
+            existing_colors = boxed_overlay[mask_indices]
+            new_colors = color.astype(np.float32)
+
+            if existing_colors.size > 0:
+                blended_colors = (existing_colors.astype(np.float32) + new_colors) / 2
+                boxed_overlay[mask_indices] = blended_colors.astype(np.uint8)
+            else:
+                boxed_overlay[mask_indices] = new_colors
+
 
             # Find contours for bounding boxes
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             largest_contour = max(contours, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(largest_contour)
-            cv2.rectangle(boxed_overlay, (x, y), (x + w, y + h), tuple(color.tolist()), 2)
+            #cv2.rectangle(boxed_overlay, (x, y), (x + w, y + h), tuple(color.tolist()), 2)
             cv2.rectangle(overlay, (x, y), (x + w, y + h), tuple(color.tolist()), 2)
             text_size = cv2.getTextSize(class_name, cv2.FONT_HERSHEY_SIMPLEX, 1, 3)[0]
             text_width, text_height = text_size

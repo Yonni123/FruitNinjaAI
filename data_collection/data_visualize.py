@@ -59,6 +59,7 @@ def visualize_dataset(dataset_dir, disable_background=False, num_samples=2, max_
 
     for idx, sample_dir in enumerate(selected_samples):
         # Load training image
+        print(sample_dir)
         img_path = os.path.join(sample_dir, "final_image.png")
         if not os.path.exists(img_path):
             print(f"Image not found: {img_path}")

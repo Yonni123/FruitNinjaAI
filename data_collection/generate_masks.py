@@ -47,13 +47,18 @@ def generate_masks_from_frame(frame_path):
         img2 = Image.open(os.path.join(frame_path, files[i])).convert("RGBA")
         res = subtract_images(img1, img2)
         mask = res.split()[3]
-        mask.save(os.path.join(masks_dir, files[i]))
+        mask_array = np.array(mask)
+        if np.count_nonzero(mask_array) >= 2:  # Some threshold
+            mask.save(os.path.join(masks_dir, files[i]))
 
     bomb = next((f for f in files if "bomb." in f), None)
     bombOutline = next((f for f in files if "bombO" in f), None)
     if bomb and bombOutline:    # We need to combine their masks
         bombPath = os.path.join(masks_dir, bomb)
         bombOPath = os.path.join(masks_dir, bombOutline)
+        if not os.path.exists(bombPath) or not os.path.exists(bombOPath):
+            return  # Bomb is outside the frame
+
         bombImg = Image.open(bombPath).convert("RGBA")
         bombOImg = Image.open(bombOPath).convert("RGBA")
 
@@ -68,6 +73,10 @@ def generate_masks_from_frame(frame_path):
         combinedMask = np.logical_or(bombMask, bombOMask).astype(np.uint8) * 255
         combinedImage = Image.fromarray(combinedMask, mode="L")
         combinedImage.save(os.path.join(masks_dir, "x-x-bomb.png"))
+    elif bomb:
+        print(f"Found only a bomb: {frame_path}")
+    elif bombOutline:
+        print(f"Found only a bomb outline: {frame_path}")
 
 def generate_masks(dataset_sort):
     if not dataset_sort or not os.path.exists(dataset_sort):
@@ -89,5 +98,5 @@ if __name__ == "__main__":
     with open(os.path.join(root_dir, "settings.json"), "r") as file:
         settings = json.load(file)["settings"]
     dataset_root_path = settings.get("datasetRootPath")
-    dataset_sort = os.path.join(dataset_root_path, "sorted")
+    dataset_sort = os.path.join(dataset_root_path, "data")
     generate_masks(dataset_sort)

@@ -4,6 +4,7 @@ from data_sort import sort_data
 from data_segment import segment_images
 from data_create import create_images
 from generate_masks import generate_masks
+from generate_bboxes import generate_bboxes
 
 
 def process_data():
@@ -26,6 +27,8 @@ def process_data():
     create_images(dataset_data, res_dir)
     print("Creating masks...")
     generate_masks(dataset_data)
+    print("Creating bounding boxes...")
+    generate_bboxes(dataset_data)
     print("Dataset done!")
 
 

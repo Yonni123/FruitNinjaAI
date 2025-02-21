@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from PIL import Image
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common import print_progress_bar
 
 

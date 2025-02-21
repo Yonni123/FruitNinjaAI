@@ -1,5 +1,6 @@
 import os
 import json
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common import extract_seq, get_last_filenum, empty_directory, copy_image
 
 

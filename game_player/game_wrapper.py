@@ -125,4 +125,4 @@ if __name__ == "__main__":
         cv2.imshow("GameFrame", frame)
 
     game = GameWrapper(custom_take_action, monitor_index=0)
-    #game.play()
+    game.play()

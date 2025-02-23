@@ -9,9 +9,10 @@ if __name__ == "__main__":
     weights_path = "../detection_model/FruitNinja/YOLO11s/weights/best.pt"
     model = YOLO(weights_path).to(device)
 
-    def custom_take_action(screen, prev_FPS=None):
+    def custom_take_action(screen, prev_FPS, counter, delta_time):
         frame = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-        frame_name = "Game Frame"
+
+        prev_FPS = prev_FPS or 0    # in the first frame, there is no FPS
 
         results = model.predict(source=frame, device=device, agnostic_nms=True, conf=0.5, verbose=False)
         for result in results:
@@ -22,7 +23,7 @@ if __name__ == "__main__":
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        cv2.setWindowTitle("GameFrame", f"{frame_name} - FPS: {prev_FPS:.2f}" if prev_FPS is not None else f"{frame_name} - FPS: N/A")
+        cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {counter:.2f} - dT: {delta_time:.2f} - Press Q to quit")
         cv2.imshow("GameFrame", frame)
 
     game = GameWrapper(custom_take_action, monitor_index=0)

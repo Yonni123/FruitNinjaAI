@@ -76,7 +76,7 @@ class GameWrapper:
                     # Blend the overlay with the original image
                     cv2.addWeighted(overlay, alpha, screen_resized, 1 - alpha, 0, screen_resized)
                     # Draw the rectangle border with 100% opacity
-                    cv2.rectangle(screen_resized, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Border with 100% opacity
+                    cv2.rectangle(screen_resized, (x1, y1), (x2, y2), (0, 255, 0), 1)  # Border with 100% opacity
 
                 # Draw the instructions with a background
                 cv2.putText(screen_resized, instructions, (10, 50), font, font_scale, background_color, line_thickness + 1, cv2.LINE_AA)
@@ -99,29 +99,29 @@ class GameWrapper:
 
     def play(self):
         sct = mss.mss()
-        last_fps_time = time.time()
+        counter = 0  # Millisecond counter
         fps = None
 
         while True:
             start_time = time.time()
             screen = np.array(sct.grab(self.__game_region))
+            delta_time = (time.time() - start_time) * 1000
+            counter += delta_time
 
-            self.__action_function(screen, fps)
+            self.__action_function(screen, fps, counter, delta_time)
 
-            if time.time() - last_fps_time >= 1:
-                fps = 1 / (time.time() - start_time)
-                last_fps_time = time.time()
+            fps = 1 / (time.time() - start_time)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
 
 if __name__ == "__main__":
-    def custom_take_action(screen, prev_FPS=None):
-        # For each frame, simply display it
+    def custom_take_action(screen, prev_FPS, counter, delta_time):
         frame = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-        frame_name = "Game Frame"
-        cv2.setWindowTitle("GameFrame", f"{frame_name} - FPS: {prev_FPS:.2f} - Press Q to quit" if prev_FPS is not None else f"{frame_name} - FPS: N/A - Press Q to quit")
+        prev_FPS = prev_FPS or 0    # in the first frame, there is no FPS
+
+        cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {counter:.2f} - dT: {delta_time:.2f} - Press Q to quit")
         cv2.imshow("GameFrame", frame)
 
     game = GameWrapper(custom_take_action, monitor_index=0)

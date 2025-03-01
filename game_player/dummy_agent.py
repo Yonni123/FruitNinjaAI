@@ -9,7 +9,7 @@ if __name__ == "__main__":
     weights_path = "../detection_model/FruitNinja/YOLO11s/weights/best.pt"
     model = YOLO(weights_path).to(device)
 
-    def custom_take_action(screen, prev_FPS, counter, delta_time):
+    def custom_take_action(self, screen, prev_FPS, counter, delta_time):
         frame = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
 
         prev_FPS = prev_FPS or 0    # in the first frame, there is no FPS

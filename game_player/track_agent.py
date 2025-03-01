@@ -16,7 +16,7 @@ if __name__ == "__main__":
     track_history = defaultdict(lambda: [])
     y_percentage_threshold = 0.1
 
-    def custom_take_action(screen, prev_FPS, time_ms, delta_time):
+    def custom_take_action(self, screen, prev_FPS, time_ms, delta_time):
         frame = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
 
         prev_FPS = prev_FPS or 0  # In the first frame, there is no FPS

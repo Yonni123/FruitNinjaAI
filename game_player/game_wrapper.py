@@ -16,6 +16,12 @@ class GameWrapper:
             
         self.__game_region = self.__get_game_region()
 
+    def game_to_screen_coords(self, gx, gy):
+        """ Convert game region coordinates to real screen coordinates. """
+        sx = self.__game_region["left"] + gx
+        sy = self.__game_region["top"] + gy
+        return sx, sy
+
     def __get_game_region(self):
         """ Capture a scaled-down screen and let the user select a region by clicking two corners. """
         selected_game_corners = []
@@ -108,7 +114,7 @@ class GameWrapper:
             delta_time = (time.time() - start_time) * 1000
             counter += delta_time
 
-            self.__action_function(screen, fps, counter, delta_time)
+            self.__action_function(self, screen, fps, counter, delta_time)
 
             fps = 1 / (time.time() - start_time)
 

@@ -44,16 +44,14 @@ if __name__ == "__main__":
 
         # Get the boxes and track IDs
         boxes = results[0].boxes.xywh.cpu()
-        if results[0].boxes.id is None:
+        if results[0].boxes.id is None: # If no frames are detected
             cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
             cv2.imshow("GameFrame", annotated_frame)
             cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
             if playing:
                 take_action(
                     self,           # For translating coordinates
-                    None,           # Bounding boxes
-                    None,           # Track ID of objects
-                    None,           # Class labels
+                    None,           # Fruits
                     track_history   # Track histroy
                 )
             return
@@ -61,19 +59,21 @@ if __name__ == "__main__":
         track_ids = results[0].boxes.id.int().cpu().tolist()
         class_ids = results[0].boxes.cls.int().cpu().tolist()
 
+        stored_fruits = []
+
         # Plot the tracks and velocity vectors
         for box, track_id, class_id in zip(boxes, track_ids, class_ids):
             x, y, w, h = map(float, box)
 
             # If fruits are not fully in the frame, bounding box is too noisy
-            y_threshold = orig_shape[0] * y_percentage_threshold
-            if y > orig_shape[0] - y_threshold:
-                continue
+            #y_threshold = orig_shape[0] * y_percentage_threshold
+            #if y > orig_shape[0] - y_threshold:
+            #    continue
 
             # Half-fruits are not important
-            label = results[0].names[class_id]
-            if "Half" in label:
-                continue
+            #label = results[0].names[class_id]
+            #if "Half" in label:
+            #    continue
 
             track = track_history[track_id]
 
@@ -84,9 +84,16 @@ if __name__ == "__main__":
             points = np.array([(p[0], p[1]) for p in track], dtype=np.int32).reshape((-1, 1, 2))
             cv2.polylines(annotated_frame, [points], isClosed=False, color=(230, 230, 230), thickness=1)
 
+            # Add fruits to current frame stored fruits
+            stored_fruits.append([box, class_id, track_id])
+
         # Clean up tracks that haven't been on screen for the last 5 seconds
         for track_id in list(track_history.keys()):
-            last_position_time = track_history[track_id][-1][2]
+            if not track_history[track_id]:  # Check if list is empty before accessing elements
+                del track_history[track_id]
+                continue  # Skip further processing
+            
+            last_position_time = track_history[track_id][-1][2]  # Safely access the last timestamp
             if time_ms - last_position_time > 5000:
                 del track_history[track_id]
 
@@ -98,9 +105,7 @@ if __name__ == "__main__":
         if playing:
             take_action(
                 self,           # For translating coordinates
-                boxes,          # Bounding boxes
-                track_ids,      # Track ID of objects
-                class_ids,      # Class labels
+                stored_fruits,  # Fruits
                 track_history   # Track histroy
             )
 

@@ -36,8 +36,7 @@ def take_action(gamewrapper, fruits, track_history):
         spx, spy = map(float, gamewrapper.game_to_screen_coords(prev_x, prev_y))
         sx, sy = map(float, gamewrapper.game_to_screen_coords(x, y))
 
-        pyautogui.moveTo(spx, spy, _pause=False)
+        pyautogui.moveTo(spx, spy, duration=0.001, _pause=False)
         pyautogui.mouseDown(button='left', _pause=False)  
-        gradual_move_to(spx,spy, sx, sy, steps=50, duration=0.3)
+        gradual_move_to(spx,spy, sx, sy, steps=60, duration=0.35)
         pyautogui.mouseUp(button='left', _pause=False)
-

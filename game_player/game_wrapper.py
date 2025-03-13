@@ -119,6 +119,7 @@ class GameWrapper:
             fps = 1 / (time.time() - start_time)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
+                cv2.destroyAllWindows()
                 break
 
 

@@ -52,7 +52,8 @@ if __name__ == "__main__":
                 take_action(
                     self,           # For translating coordinates
                     None,           # Fruits
-                    track_history   # Track histroy
+                    track_history,  # Track histroy
+                    annotated_frame
                 )
             return
 
@@ -66,14 +67,13 @@ if __name__ == "__main__":
             x, y, w, h = map(float, box)
 
             # If fruits are not fully in the frame, bounding box is too noisy
-            #y_threshold = orig_shape[0] * y_percentage_threshold
-            #if y > orig_shape[0] - y_threshold:
-            #    continue
+            y_threshold = orig_shape[0] * y_percentage_threshold
+            if y > orig_shape[0] - y_threshold:
+                continue
 
             # Half-fruits are not important
-            #label = results[0].names[class_id]
-            #if "Half" in label:
-            #    continue
+            if class_id % 2 != 1 and class_id != 20:    # 20 is bomb
+                continue    # Skip half fruits, they have even number
 
             track = track_history[track_id]
 
@@ -97,17 +97,18 @@ if __name__ == "__main__":
             if time_ms - last_position_time > 5000:
                 del track_history[track_id]
 
-        # Display the annotated frame
-        cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
-        cv2.imshow("GameFrame", annotated_frame)
-        cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
-
         if playing:
             take_action(
                 self,           # For translating coordinates
                 stored_fruits,  # Fruits
-                track_history   # Track histroy
+                track_history,  # Track histroy
+                annotated_frame
             )
+
+        # Display the annotated frame
+        cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
+        cv2.imshow("GameFrame", annotated_frame)
+        cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
 
     game = GameWrapper(custom_take_action, monitor_index=0)
     game.play()

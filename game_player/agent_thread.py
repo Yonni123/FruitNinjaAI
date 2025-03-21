@@ -9,6 +9,7 @@ import os
 import threading
 import time
 import pyautogui
+import math
 
 
 playing = False  # Global variable to track whether the bot is active
@@ -74,6 +75,8 @@ if __name__ == "__main__":
     current_fruits = []
     y_percentage_threshold = 0.1
     game_frame = None
+
+    pyautogui.PAUSE = 0.01
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
         global current_fruits, track_history, game_frame
@@ -145,7 +148,12 @@ if __name__ == "__main__":
     
     def take_action():
         global current_fruits, track_history, game, game_frame
+        
         while True:
+            if keyboard.is_pressed('q'):
+                print("Q pressed, exiting...")
+                break
+
             if not playing:
                 time.sleep(1)
                 continue
@@ -158,13 +166,14 @@ if __name__ == "__main__":
                 time.sleep(0.05)
                 continue
 
+            #bombs = [fruit for fruit in fruits_copy if fruit[1] == 20]
             for fruit in fruits_copy:
                 box, class_id, track_id = fruit
-                if class_id % 2 != 1 and class_id != 20:    # 20 is bomb
-                    continue    # Skip half fruits, they have even number
+                if class_id % 2 != 1:
+                    continue    # Skip half fruits and bombs, they have even number
 
-                ms_into_the_future = 150 # This could definetly use a better name lol
-                prediction = predict_fruit_position(track_history[track_id], ms_into_the_future)
+                ms_into_the_future = 110 # This could definetly use a better name lol
+                prediction = predict_fruit_position(track_history_copy[track_id], ms_into_the_future)
                 if prediction is None:
                     continue    # Not enough historical values to make prediction
                 cv2.circle(game_frame, (int(prediction[0]), int(prediction[1])), 5, (0, 0, 255), -1)
@@ -172,17 +181,15 @@ if __name__ == "__main__":
                 x, y, w, h = box
 
                 spx, spy = map(float, game.game_to_screen_coords(prediction[0], prediction[1]))
+                pyautogui.moveTo(spx, spy, duration=0)
+                pyautogui.mouseDown(button='left')
+
                 sx, sy = map(float, game.game_to_screen_coords(x, y))
+                pyautogui.moveTo(sx, sy, duration=0.10)
+                pyautogui.mouseUp(button='left')
 
-                if class_id == 20:
-                    # TODO: AVOID BOMBS
-                    continue    # Skip bombs for now
-
-                pyautogui.moveTo(spx, spy, duration=0.001, _pause=False)
-                pyautogui.mouseDown(button='left', _pause=False)  
-                gradual_move_to(spx, spy, sx, sy, steps=70, duration=0.35)
-                pyautogui.mouseUp(button='left', _pause=False)
-            time.sleep(0.05)
+                break
+            time.sleep(0.15)
 
 
     action_thread = threading.Thread(target=take_action, daemon=True)

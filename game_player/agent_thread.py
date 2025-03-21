@@ -54,16 +54,6 @@ def predict_fruit_position(track_history, target_distance):
 
     return x2 + dx, y2 + dy
 
-def gradual_move_to(x1, y1, x2, y2, steps=20, duration=0.2):
-    """Moves the cursor gradually from (x1, y1) to (x2, y2)."""
-    for i in range(1, steps + 1):
-        # Calculate the intermediate position
-        new_x = x1 + (x2 - x1) * (i / steps)
-        new_y = y1 + (y2 - y1) * (i / steps)
-        
-        # Move the cursor to the new position
-        pyautogui.moveTo(new_x, new_y, duration=duration / steps, _pause=False)
-
 
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -77,9 +67,10 @@ if __name__ == "__main__":
     game_frame = None
 
     pyautogui.PAUSE = 0.01
+    danger_zone = 100
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
-        global current_fruits, track_history, game_frame
+        global current_fruits, track_history, game_frame, danger_zone
         frame = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
 
         prev_FPS = prev_FPS or 0  # In the first frame, there is no FPS
@@ -125,6 +116,9 @@ if __name__ == "__main__":
             track = track_history[track_id]
             points = np.array([(p[0], p[1]) for p in track], dtype=np.int32).reshape((-1, 1, 2))
             cv2.polylines(game_frame, [points], isClosed=False, color=(230, 230, 230), thickness=1)
+            if class_id == 20:  # Visualize danger zone around bomb
+                bx, by, _, _ = box
+                cv2.circle(game_frame, (int(bx), int(by)), danger_zone, (0, 0, 255), 2)
 
         # Clean up tracks that haven't been on screen for the last 5 seconds
         for track_id in list(track_history.keys()):
@@ -144,10 +138,11 @@ if __name__ == "__main__":
         cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
 
     game = GameWrapper(track_fruits, monitor_index=0)
-
+    game_frame_w, game_frame_h = game.get_game_dimensions()
+    danger_zone = int(game_frame_w * 0.125)   # Radius around bombs in which we will not cut fruits
     
     def take_action():
-        global current_fruits, track_history, game, game_frame
+        global current_fruits, track_history, game, game_frame, danger_zone
         
         while True:
             if keyboard.is_pressed('q'):
@@ -172,13 +167,30 @@ if __name__ == "__main__":
                 if class_id % 2 != 1:
                     continue    # Skip half fruits and bombs, they have even number
 
+                x, y, w, h = box
+
+                # Check if fruit is too close to a bomb
+                too_close = any(
+                    abs(x - bx) < danger_zone and
+                    abs(y - by) < danger_zone
+                    for bx, by, bw, bh in (b[0] for b in bombs)
+                )
+                if too_close:
+                    continue
+
                 ms_into_the_future = 110 # This could definetly use a better name lol
                 prediction = predict_fruit_position(track_history_copy[track_id], ms_into_the_future)
                 if prediction is None:
                     continue    # Not enough historical values to make prediction
-                cv2.circle(game_frame, (int(prediction[0]), int(prediction[1])), 5, (0, 0, 255), -1)
-
-                x, y, w, h = box
+                
+                # Check if prediction is too close to a bomb
+                too_close = any(
+                    abs(prediction[0] - bx) < danger_zone and
+                    abs(prediction[1] - by) < danger_zone
+                    for bx, by, bw, bh in (b[0] for b in bombs)
+                )
+                if too_close:
+                    continue
 
                 spx, spy = map(float, game.game_to_screen_coords(prediction[0], prediction[1]))
                 pyautogui.moveTo(spx, spy, duration=0)

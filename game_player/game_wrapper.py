@@ -21,6 +21,10 @@ class GameWrapper:
         sx = self.__game_region["left"] + gx
         sy = self.__game_region["top"] + gy
         return sx, sy
+    
+    def get_game_dimensions(self):
+        """ Returns the width and height of the selected game region. """
+        return self.__game_region["width"], self.__game_region["height"]
 
     def __get_game_region(self):
         """ Capture a scaled-down screen and let the user select a region by clicking two corners. """

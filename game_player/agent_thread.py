@@ -166,7 +166,7 @@ if __name__ == "__main__":
                 time.sleep(0.05)
                 continue
 
-            #bombs = [fruit for fruit in fruits_copy if fruit[1] == 20]
+            bombs = [fruit for fruit in fruits_copy if fruit[1] == 20]
             for fruit in fruits_copy:
                 box, class_id, track_id = fruit
                 if class_id % 2 != 1:
@@ -185,11 +185,13 @@ if __name__ == "__main__":
                 pyautogui.mouseDown(button='left')
 
                 sx, sy = map(float, game.game_to_screen_coords(x, y))
-                pyautogui.moveTo(sx, sy, duration=0.10)
+                pyautogui.moveTo(sx, sy, duration=0.05)
                 pyautogui.mouseUp(button='left')
 
-                break
-            time.sleep(0.15)
+                if bombs:
+                    break
+
+            time.sleep(0.20)
 
 
     action_thread = threading.Thread(target=take_action, daemon=True)

@@ -17,9 +17,13 @@ class GameWrapper:
         self.__game_region = self.__get_game_region()
 
     def game_to_screen_coords(self, gx, gy):
-        """ Convert game region coordinates to real screen coordinates. """
+        """ Convert game region coordinates to real screen coordinates, clamping within the game region. """
         sx = self.__game_region["left"] + gx
         sy = self.__game_region["top"] + gy
+
+        # Clamp values to ensure they stay within the game region
+        sx = max(self.__game_region["left"], min(sx, self.__game_region["left"] + self.__game_region["width"] - 1))
+        sy = max(self.__game_region["top"], min(sy, self.__game_region["top"] + self.__game_region["height"] - 1))
         return sx, sy
     
     def get_game_dimensions(self):

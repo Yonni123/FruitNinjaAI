@@ -9,7 +9,6 @@ import os
 import threading
 import time
 import pyautogui
-import math
 
 
 playing = False  # Global variable to track whether the bot is active
@@ -63,11 +62,9 @@ if __name__ == "__main__":
     # Store the track history for each fruit
     track_history = defaultdict(lambda: [])
     current_fruits = []
-    y_percentage_threshold = 0.1
+    y_percentage_threshold = 0.1    # If fruits are below 10% of the screen, ignore them.
     game_frame = None
-
-    pyautogui.PAUSE = 0.01
-    danger_zone = 100
+    danger_zone = 100   # Just a global value so that fruit tracker can plot it, action thread will change this later.
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
         global current_fruits, track_history, game_frame, danger_zone
@@ -138,11 +135,18 @@ if __name__ == "__main__":
         cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
 
     game = GameWrapper(track_fruits, monitor_index=0)
-    game_frame_w, game_frame_h = game.get_game_dimensions()
-    danger_zone = int(game_frame_w * 0.125)   # Radius around bombs in which we will not cut fruits
     
     def take_action():
         global current_fruits, track_history, game, game_frame, danger_zone
+
+        # Calibration values:
+        game_frame_w_to_danger_zone_radius_ratio = 0.150
+        game_frame_w, game_frame_h = game.get_game_dimensions()
+        danger_zone = int(game_frame_w * game_frame_w_to_danger_zone_radius_ratio)   # Radius around bombs in which we will not cut fruits
+
+        wait_time_between_cuts = 0.20
+        cut_duration = 0.05
+        pyautogui.PAUSE = 0.01
         
         while True:
             if keyboard.is_pressed('q'):
@@ -171,8 +175,7 @@ if __name__ == "__main__":
 
                 # Check if fruit is too close to a bomb
                 too_close = any(
-                    abs(x - bx) < danger_zone and
-                    abs(y - by) < danger_zone
+                    (x - bx) ** 2 + (y - by) ** 2 < danger_zone ** 2
                     for bx, by, bw, bh in (b[0] for b in bombs)
                 )
                 if too_close:
@@ -185,8 +188,7 @@ if __name__ == "__main__":
                 
                 # Check if prediction is too close to a bomb
                 too_close = any(
-                    abs(prediction[0] - bx) < danger_zone and
-                    abs(prediction[1] - by) < danger_zone
+                    (x - bx) ** 2 + (y - by) ** 2 < danger_zone ** 2
                     for bx, by, bw, bh in (b[0] for b in bombs)
                 )
                 if too_close:
@@ -197,13 +199,13 @@ if __name__ == "__main__":
                 pyautogui.mouseDown(button='left')
 
                 sx, sy = map(float, game.game_to_screen_coords(x, y))
-                pyautogui.moveTo(sx, sy, duration=0.05)
+                pyautogui.moveTo(sx, sy, duration=cut_duration)
                 pyautogui.mouseUp(button='left')
 
                 if bombs:
                     break
 
-            time.sleep(0.20)
+            time.sleep(wait_time_between_cuts)
 
 
     action_thread = threading.Thread(target=take_action, daemon=True)

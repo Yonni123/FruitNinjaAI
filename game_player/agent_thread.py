@@ -53,6 +53,14 @@ def predict_fruit_position(track_history, target_distance):
 
     return x2 + dx, y2 + dy
 
+def draw_danger_zones(fruits, game_frame, danger_zone_radius):
+    for fruit in fruits:
+        box, class_id, track_id = fruit
+        if class_id != 20:
+            continue
+        x, y, w, h = box
+        cv2.circle(game_frame, (int(x), int(y)), danger_zone_radius, (0, 0, 255), 2)
+    return game_frame
 
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -61,10 +69,12 @@ if __name__ == "__main__":
 
     # Store the track history for each fruit
     track_history = defaultdict(lambda: [])
-    current_fruits = []
+    current_fruits = []             # This includes bombs! where class id is 20
     y_percentage_threshold = 0.1    # If fruits are below 10% of the screen, ignore them.
     game_frame = None
     danger_zone = 100   # Just a global value so that fruit tracker can plot it, action thread will change this later.
+    bombs_ms_into_future = 70       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
+                                    # This affects the dangerzone in the direction the bomb is moving.
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
         global current_fruits, track_history, game_frame, danger_zone
@@ -93,12 +103,13 @@ if __name__ == "__main__":
 
         with lock:
             current_fruits = []
+            new_bombs = []
             for box, track_id, class_id in zip(boxes, track_ids, class_ids):
                 x, y, w, h = map(float, box)
 
                  # If fruits are not fully in the frame, bounding box is too noisy
                 y_threshold = orig_shape[0] * y_percentage_threshold
-                if y > orig_shape[0] - y_threshold:
+                if y > orig_shape[0] - y_threshold and class_id != 20:
                     continue
 
                 # Half-fruits are not important
@@ -109,13 +120,23 @@ if __name__ == "__main__":
                 track.append((x, y, time_ms))
                 current_fruits.append([box, class_id, track_id])
 
+                if class_id == 20:
+                    prediction = predict_fruit_position(track_history[track_id], bombs_ms_into_future)
+                    if prediction is not None:
+                        new_box = (int(prediction[0]), int(prediction[1]), w, h)
+                        new_bomb = (new_box, class_id, track_id)
+                        new_bombs.append(new_bomb)
+            current_fruits.extend(new_bombs)
+        # We are adding new "virtual" bomb in the direction the bomb is going (the prediction)
+        # This makes the agent extra careful when it's "in front of" the bomb.
+
         for box, track_id, class_id in zip(boxes, track_ids, class_ids):
             track = track_history[track_id]
             points = np.array([(p[0], p[1]) for p in track], dtype=np.int32).reshape((-1, 1, 2))
             cv2.polylines(game_frame, [points], isClosed=False, color=(230, 230, 230), thickness=1)
-            if class_id == 20:  # Visualize danger zone around bomb
-                bx, by, _, _ = box
-                cv2.circle(game_frame, (int(bx), int(by)), danger_zone, (0, 0, 255), 2)
+        draw_danger_zones(fruits = current_fruits,
+                                   game_frame = game_frame,
+                                   danger_zone_radius = danger_zone)
 
         # Clean up tracks that haven't been on screen for the last 5 seconds
         for track_id in list(track_history.keys()):
@@ -140,13 +161,15 @@ if __name__ == "__main__":
         global current_fruits, track_history, game, game_frame, danger_zone
 
         # Calibration values:
-        game_frame_w_to_danger_zone_radius_ratio = 0.150
+        game_frame_w_to_danger_zone_radius_ratio = 0.100
         game_frame_w, game_frame_h = game.get_game_dimensions()
         danger_zone = int(game_frame_w * game_frame_w_to_danger_zone_radius_ratio)   # Radius around bombs in which we will not cut fruits
 
-        wait_time_between_cuts = 0.20
-        cut_duration = 0.05
-        pyautogui.PAUSE = 0.01
+        wait_time_between_cuts = 0.20   # How long to wait between "cut groups". Triggered when there is a bomb present to be careful.
+        cut_duration = 0.05             # How long each cut lasts.
+        pyautogui.PAUSE = 0.01          # After every pyautogui. This pause is needed for the game to register what happend
+        fruits_ms_into_future = 110     # How long into the future we want to predict the fruit. Too much could be dangerous as it might hit a bomb
+
         
         while True:
             if keyboard.is_pressed('q'):
@@ -181,14 +204,13 @@ if __name__ == "__main__":
                 if too_close:
                     continue
 
-                ms_into_the_future = 110 # This could definetly use a better name lol
-                prediction = predict_fruit_position(track_history_copy[track_id], ms_into_the_future)
+                prediction = predict_fruit_position(track_history_copy[track_id], fruits_ms_into_future)
                 if prediction is None:
                     continue    # Not enough historical values to make prediction
                 
                 # Check if prediction is too close to a bomb
                 too_close = any(
-                    (x - bx) ** 2 + (y - by) ** 2 < danger_zone ** 2
+                    (prediction[0] - bx) ** 2 + (prediction[1] - by) ** 2 < danger_zone ** 2
                     for bx, by, bw, bh in (b[0] for b in bombs)
                 )
                 if too_close:

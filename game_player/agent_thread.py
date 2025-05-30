@@ -70,10 +70,10 @@ if __name__ == "__main__":
     # Store the track history for each fruit
     track_history = defaultdict(lambda: [])
     current_fruits = []             # This includes bombs! where class id is 20
-    y_percentage_threshold = 0.1    # If fruits are below 10% of the screen, ignore them.
+    y_percentage_threshold = 0.22    # If fruits are below 10% of the screen, ignore them.
     game_frame = None
     danger_zone = 100   # Just a global value so that fruit tracker can plot it, action thread will change this later.
-    bombs_ms_into_future = 70       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
+    bombs_ms_into_future = 100       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
                                     # This affects the dangerzone in the direction the bomb is moving.
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
@@ -113,8 +113,8 @@ if __name__ == "__main__":
                     continue
 
                 # Half-fruits are not important
-                if class_id % 2 != 1 and class_id != 20:    # 20 is bomb
-                    continue    # Skip half fruits, they have even number
+                #if class_id % 2 != 1 and class_id != 20:    # 20 is bomb
+                #    continue    # Skip half fruits, they have even number
 
                 track = track_history[track_id]
                 track.append((x, y, time_ms))
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         global current_fruits, track_history, game, game_frame, danger_zone
 
         # Calibration values:
-        game_frame_w_to_danger_zone_radius_ratio = 0.100
+        game_frame_w_to_danger_zone_radius_ratio = 0.120
         game_frame_w, game_frame_h = game.get_game_dimensions()
         danger_zone = int(game_frame_w * game_frame_w_to_danger_zone_radius_ratio)   # Radius around bombs in which we will not cut fruits
 
@@ -191,8 +191,8 @@ if __name__ == "__main__":
             bombs = [fruit for fruit in fruits_copy if fruit[1] == 20]
             for fruit in fruits_copy:
                 box, class_id, track_id = fruit
-                if class_id % 2 != 1:
-                    continue    # Skip half fruits and bombs, they have even number
+                #if class_id % 2 != 1:
+                #    continue    # Skip half fruits and bombs, they have even number
 
                 x, y, w, h = box
 

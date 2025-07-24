@@ -29,6 +29,54 @@ class GameWrapper:
     def get_game_dimensions(self):
         """ Returns the width and height of the selected game region. """
         return self.__game_region["width"], self.__game_region["height"]
+    
+    def __auto_crop_edges(self, image, x1, y1, x2, y2):
+        """Crops an image by detecting the edge of content using Canny edge detection."""
+        # Crop the original image to the selected coordinates
+        image = image[y1:y2, x1:x2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 2, 50)
+
+        # Do sliding window 3 columns of pixels at a time from left to right
+        height, width = edges.shape
+        sliding_window = 2
+
+        max_c, _x1 = 0, 0
+        for x in range(0, width // 4 - sliding_window):
+            window = edges[:, x:x+sliding_window]
+            edge_count = cv2.countNonZero(window)
+            center = x + 1  # Center of 3-column window
+            if edge_count > max_c:
+                max_c, _x1 = edge_count, center
+        max_c, _x2 = 0, 0
+        # Loop through the last 25% of the width
+        for x in range(width - width // 4 - sliding_window, width - sliding_window):
+            window = edges[:, x:x+sliding_window]
+            edge_count = cv2.countNonZero(window)
+            center = x + 1
+            if edge_count > max_c:
+                max_c, _x2 = edge_count, center
+        # Loop through the first 25% of the height
+        max_c, _y1 = 0, 0
+        for y in range(0, height // 4 - sliding_window):
+            window = edges[y:y+sliding_window, :]
+            edge_count = cv2.countNonZero(window)
+            center = y + 1
+            if edge_count > max_c:
+                max_c, _y1 = edge_count, center
+        max_c, _y2 = 0, 0
+        # Loop through the last 25% of the height
+        for y in range(height - height // 4 - sliding_window, height - sliding_window):
+            window = edges[y:y+sliding_window, :]
+            edge_count = cv2.countNonZero(window)
+            center = y + 1
+            if edge_count > max_c:
+                max_c, _y2 = edge_count, center    
+
+        # Convert to screen coordinates
+        x1, y1 = self.game_to_screen_coords(_x1, _y1)
+        x2, y2 = self.game_to_screen_coords(_x2, _y2)
+        return x1, y1, x2, y2
 
     def __get_game_region(self):
         """ Capture a scaled-down screen and let the user select a region by clicking two corners. """
@@ -108,6 +156,8 @@ class GameWrapper:
         # Once the region is selected, process the coordinates and return the game region
         cv2.destroyAllWindows()
         x1, y1, x2, y2 = selected_game_corners[0][0] * 2, selected_game_corners[0][1] * 2, mouse_callback_res["X"] * 2, mouse_callback_res["Y"] * 2
+        self.__game_region = {"top": min(y1, y2), "left": min(x1, x2), "width": abs(x2 - x1), "height": abs(y2 - y1)}
+        x1, y1, x2, y2 = self.__auto_crop_edges(screen, x1, y1, x2, y2)
         return {"top": min(y1, y2), "left": min(x1, x2), "width": abs(x2 - x1), "height": abs(y2 - y1)}
 
 

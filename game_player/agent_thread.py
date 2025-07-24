@@ -53,17 +53,44 @@ def predict_fruit_position(track_history, target_distance):
 
     return x2 + dx, y2 + dy
 
+draw_width = 2
 def draw_danger_zones(fruits, game_frame, danger_zone_radius):
     for fruit in fruits:
         box, class_id, track_id = fruit
         if class_id != 20:
             continue
         x, y, w, h = box
-        cv2.circle(game_frame, (int(x), int(y)), danger_zone_radius, (0, 0, 255), 2)
+        cv2.circle(game_frame, (int(x), int(y)), danger_zone_radius, (0, 0, 255), draw_width)
     return game_frame
 
+font = cv2.FONT_HERSHEY_SIMPLEX
+def plot_game_frame(game_frame, boxes, class_ids):
+    """ Annotates the game frame with bounding boxes and IDs. """
+    for box, class_id in zip(boxes, class_ids):
+        color = (0, 255, 0) if class_id % 2 else (255, 0, 0)
+        text = "Fruit" if class_id % 2 else "Half"
+        if class_id == 20:
+            color = (0, 0, 255)
+            text = "Bomb"
+
+        x, y, w, h = map(int, box)
+        # Positions are middle of the box, move to top-left corner
+        x -= w // 2
+        y -= h // 2
+        cv2.rectangle(game_frame, (x, y), (x + w, y + h), color, draw_width)
+        cv2.putText(game_frame, text, (x, y - 5), font, 0.5, color, draw_width)
+    return game_frame
+
+
 if __name__ == "__main__":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = ""
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)} is available.")
+        device = "cuda"
+    else:
+        print("No GPU available. Training will run on CPU.")
+        print("This will be very slow, possibly unplayable, consider using a GPU.")
+        device = "cpu"
     weights_path = "../detection_model/FruitNinja/YOLO11s/weights/best.pt"
     model = YOLO(weights_path).to(device)
 
@@ -85,21 +112,23 @@ if __name__ == "__main__":
         # Run YOLO tracking on the frame, persisting tracks between frames
         script_dir = os.path.dirname(os.path.abspath(__file__))
         tracker_path = os.path.join(script_dir, "custom_tracker.yaml")
-        results = model.track(frame, persist=True, verbose=False, tracker=tracker_path)
+        resize_factor = 0.5  # Resize factor for faster processing
+        frame_small = cv2.resize(frame, (0, 0), fx=resize_factor, fy=resize_factor)
+        results = model.track(frame_small, persist=True, verbose=False, tracker=tracker_path)
 
-        game_frame = results[0].plot()
-        orig_shape = results[0].orig_shape
-
-        # Get the boxes and track IDs
-        boxes = results[0].boxes.xywh.cpu()
         if results[0].boxes.id is None: # If no frames are detected
             cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
-            cv2.imshow("GameFrame", game_frame)
+            cv2.imshow("GameFrame", frame)
             cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)
             return
 
+        boxes = results[0].boxes.xywh.cpu()
+        boxes = boxes * (1 / resize_factor)  # Scale back to original size
         track_ids = results[0].boxes.id.int().cpu().tolist()
         class_ids = results[0].boxes.cls.int().cpu().tolist()
+
+        game_frame = plot_game_frame(frame, boxes, class_ids)
+        orig_shape = game_frame.shape[:2]
 
         with lock:
             current_fruits = []
@@ -107,14 +136,10 @@ if __name__ == "__main__":
             for box, track_id, class_id in zip(boxes, track_ids, class_ids):
                 x, y, w, h = map(float, box)
 
-                 # If fruits are not fully in the frame, bounding box is too noisy
+                # If fruits are not fully in the frame, bounding box is too noisy
                 y_threshold = orig_shape[0] * y_percentage_threshold
                 if y > orig_shape[0] - y_threshold and class_id != 20:
                     continue
-
-                # Half-fruits are not important
-                #if class_id % 2 != 1 and class_id != 20:    # 20 is bomb
-                #    continue    # Skip half fruits, they have even number
 
                 track = track_history[track_id]
                 track.append((x, y, time_ms))
@@ -191,8 +216,8 @@ if __name__ == "__main__":
             bombs = [fruit for fruit in fruits_copy if fruit[1] == 20]
             for fruit in fruits_copy:
                 box, class_id, track_id = fruit
-                #if class_id % 2 != 1:
-                #    continue    # Skip half fruits and bombs, they have even number
+                if class_id % 2 != 1:
+                    continue    # Skip half fruits and bombs, they have even number
 
                 x, y, w, h = box
 

@@ -24,36 +24,67 @@ def toggle_playing():
 
 keyboard.add_hotkey("s", toggle_playing)  # Bind 'S' key to toggle playing
 
-def predict_fruit_position(track_history, target_distance):
+
+def predict_fruit_position(track_history, target_time_ms, max_distance=90):
     """
-    Predicts the future (X, Y) position of a fruit based on its movement history,
-    assuming constant velocity.
+    Predicts the future (X, Y) position of a fruit using parabolic motion,
+    with an optional limit on how far the prediction can be from the current position.
 
     Parameters:
     - track_history: List of (X, Y, ms) tuples.
-    - target_distance: Distance to predict ahead.
+    - target_time_ms: Time in the future to predict, in milliseconds.
+    - max_distance: Maximum allowed distance from the current position.
 
     Returns:
     - (predicted_x, predicted_y): Future coordinates.
     """
-    if len(track_history) < 2:
-        return None  # Need at least 2 points to determine direction
+    if len(track_history) < 3:
+        return None  # Not enough data to fit a parabola
 
-    # Get the last two positions
-    x1, y1, _ = track_history[-2]
-    x2, y2, _ = track_history[-1]
+    # Extract positions and timestamps
+    xs = []
+    ys = []
+    ts = []
 
-    # Compute direction
-    dx, dy = x2 - x1, y2 - y1
-    length = np.hypot(dx, dy)
+    for x, y, t in track_history:
+        xs.append(x)
+        ys.append(y)
+        ts.append(t)
 
-    if length == 0:
-        return x2, y2  # No movement, return the same position
+    # Convert to numpy arrays
+    ts = np.array(ts, dtype=float)
+    xs = np.array(xs, dtype=float)
+    ys = np.array(ys, dtype=float)
 
-    # Scale direction to target distance
-    dx, dy = (dx / length) * target_distance, (dy / length) * target_distance
+    # Normalize time
+    t0 = ts[-1]
+    ts -= t0
+    future_t = target_time_ms
 
-    return x2 + dx, y2 + dy
+    # Fit quadratic curves
+    coeffs_x = np.polyfit(ts, xs, 2)
+    coeffs_y = np.polyfit(ts, ys, 2)
+
+    # Predict position at future_t
+    raw_pred_x = np.polyval(coeffs_x, future_t)
+    raw_pred_y = np.polyval(coeffs_y, future_t)
+
+    # Clamp to max distance from last known point
+    last_x = xs[-1]
+    last_y = ys[-1]
+    dx = raw_pred_x - last_x
+    dy = raw_pred_y - last_y
+    dist = np.hypot(dx, dy)
+
+    if dist > max_distance:
+        scale = max_distance / dist
+        dx *= scale
+        dy *= scale
+
+    predicted_x = last_x + dx
+    predicted_y = last_y + dy
+
+    return predicted_x, predicted_y
 
 draw_width = 2
 def draw_danger_zones(fruits, game_frame, danger_zone_radius):
@@ -73,6 +104,7 @@ def plot_game_frame(game_frame, fruits, class_ids):
         box, class_id, track_id = fruit
         color = (0, 255, 0) if class_id % 2 else (255, 0, 0)
         text = "Fruit" if class_id % 2 else "Half"
+        text += f" {track_id}"
         if class_id == 20:
             color = (0, 0, 255)
             text = "Bomb"
@@ -182,6 +214,36 @@ def draw_path_on_frame(frame, path_points, color=(0, 255, 0), thickness=2):
         p2 = (int(path_points[i + 1][0]), int(path_points[i + 1][1]))
         cv2.line(frame, p1, p2, color, thickness)
 
+def move_if_mouse_on_bomb(game):
+    screen_width, screen_height = pyautogui.size()
+    screen_width, screen_height = game.screen_to_game_coords(screen_width, screen_height)
+    third = screen_width / 3
+    x, y = pyautogui.position()
+    x, y = game.screen_to_game_coords(x, y)
+
+    # Simulate mouse up (e.g., releasing the mouse button)
+    pyautogui.mouseUp()
+    time.sleep(0.1)  # Wait for a short time
+
+    # Determine which third we're in
+    if x < third:
+        current_zone = 'left'
+    elif x < 2 * third:
+        current_zone = 'middle'
+    else:
+        current_zone = 'right'
+
+    # Decide the furthest point to move to
+    if current_zone == 'left':
+        new_x = screen_width - 10  # Move near right edge
+    elif current_zone == 'right':
+        new_x = 10  # Move near left edge
+    else:  # Middle
+        new_x = 10 if x > screen_width / 2 else screen_width - 10
+
+    new_x, y = game.game_to_screen_coords(new_x, y)
+    pyautogui.moveTo(new_x, y, duration=0.001)  # Move smoothly
+
 
 if __name__ == "__main__":
     device = ""
@@ -281,9 +343,9 @@ if __name__ == "__main__":
                 last_box, last_seen_time, last_pred = known_bombs[track_id]
                 x, y, w, h = last_box
 
-                if y > orig_shape[0] * 0.95:  # Fell off the screen
-                    del known_bombs[track_id]
-                    continue
+                #if y > orig_shape[0] * 0.99:  # Fell off the screen
+                #    del known_bombs[track_id]
+                #    continue
                 
                 if time_ms - last_seen_time > 500:  # Too long unseen
                     del known_bombs[track_id]
@@ -360,13 +422,13 @@ if __name__ == "__main__":
             mouse_x, mouse_y = pyautogui.position()
             mouse_x, mouse_y = game.screen_to_game_coords(mouse_x, mouse_y)
 
-            # Check if mouse is inside a bomb, if so, DO NOT MOVE!!
+            # Check if mouse is inside a bomb, if so, Move somewhere else
             too_close = any(
                 (mouse_x - bx) ** 2 + (mouse_y - by) ** 2 < danger_zone ** 2
                 for bx, by, bw, bh in (b[0] for b in bombs)
             )
             if too_close:
-                time.sleep(0.05)
+                move_if_mouse_on_bomb(game)
                 continue
 
             path_points = [] # Path to cut the fruits
@@ -374,6 +436,10 @@ if __name__ == "__main__":
                 box, class_id, track_id = fruit
                 if class_id % 2 != 1 or class_id == 20:
                     continue    # Skip half fruits and bombs, they have even number
+
+                fruit_track = track_history_copy.get(track_id, [])
+                if len(fruit_track) < 2 or (fruit_track[-1][2] - fruit_track[0][2]) < 50:
+                    continue
 
                 x, y, w, h = box
 

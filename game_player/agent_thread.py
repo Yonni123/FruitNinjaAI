@@ -22,36 +22,66 @@ def toggle_playing():
 
 keyboard.add_hotkey("s", toggle_playing)  # Bind 'S' key to toggle playing
 
-def predict_fruit_position(track_history, target_distance):
+def predict_fruit_position(track_history, target_time_ms, max_distance=90):
     """
-    Predicts the future (X, Y) position of a fruit based on its movement history,
-    assuming constant velocity.
+    Predicts the future (X, Y) position of a fruit using parabolic motion,
+    with an optional limit on how far the prediction can be from the current position.
 
     Parameters:
     - track_history: List of (X, Y, ms) tuples.
-    - target_distance: Distance to predict ahead.
+    - target_time_ms: Time in the future to predict, in milliseconds.
+    - max_distance: Maximum allowed distance from the current position.
 
     Returns:
     - (predicted_x, predicted_y): Future coordinates.
     """
-    if len(track_history) < 2:
-        return None  # Need at least 2 points to determine direction
+    if len(track_history) < 3:
+        return None  # Not enough data to fit a parabola
 
-    # Get the last two positions
-    x1, y1, _ = track_history[-2]
-    x2, y2, _ = track_history[-1]
+    # Extract positions and timestamps
+    xs = []
+    ys = []
+    ts = []
 
-    # Compute direction
-    dx, dy = x2 - x1, y2 - y1
-    length = np.hypot(dx, dy)
+    for x, y, t in track_history:
+        xs.append(x)
+        ys.append(y)
+        ts.append(t)
 
-    if length == 0:
-        return x2, y2  # No movement, return the same position
+    # Convert to numpy arrays
+    ts = np.array(ts, dtype=float)
+    xs = np.array(xs, dtype=float)
+    ys = np.array(ys, dtype=float)
 
-    # Scale direction to target distance
-    dx, dy = (dx / length) * target_distance, (dy / length) * target_distance
+    # Normalize time
+    t0 = ts[-1]
+    ts -= t0
+    future_t = target_time_ms
 
-    return x2 + dx, y2 + dy
+    # Fit quadratic curves
+    coeffs_x = np.polyfit(ts, xs, 2)
+    coeffs_y = np.polyfit(ts, ys, 2)
+
+    # Predict position at future_t
+    raw_pred_x = np.polyval(coeffs_x, future_t)
+    raw_pred_y = np.polyval(coeffs_y, future_t)
+
+    # Clamp to max distance from last known point
+    last_x = xs[-1]
+    last_y = ys[-1]
+    dx = raw_pred_x - last_x
+    dy = raw_pred_y - last_y
+    dist = np.hypot(dx, dy)
+
+    if dist > max_distance:
+        scale = max_distance / dist
+        dx *= scale
+        dy *= scale
+
+    predicted_x = last_x + dx
+    predicted_y = last_y + dy
+
+    return predicted_x, predicted_y
 
 draw_width = 2
 def draw_danger_zones(fruits, game_frame, danger_zone_radius):
@@ -64,14 +94,17 @@ def draw_danger_zones(fruits, game_frame, danger_zone_radius):
     return game_frame
 
 font = cv2.FONT_HERSHEY_SIMPLEX
-def plot_game_frame(game_frame, boxes, class_ids):
+def plot_game_frame(game_frame, fruits, class_ids):
     """ Annotates the game frame with bounding boxes and IDs. """
-    for box, class_id in zip(boxes, class_ids):
+
+    for fruit, class_id in zip(fruits, class_ids):
+        box, class_id, track_id = fruit
         color = (0, 255, 0) if class_id % 2 else (255, 0, 0)
         text = "Fruit" if class_id % 2 else "Half"
         if class_id == 20:
             color = (0, 0, 255)
             text = "Bomb"
+        text += f" {track_id}"
 
         x, y, w, h = map(int, box)
         # Positions are middle of the box, move to top-left corner
@@ -127,8 +160,7 @@ if __name__ == "__main__":
         track_ids = results[0].boxes.id.int().cpu().tolist()
         class_ids = results[0].boxes.cls.int().cpu().tolist()
 
-        game_frame = plot_game_frame(frame, boxes, class_ids)
-        orig_shape = game_frame.shape[:2]
+        orig_shape = frame.shape[:2]
 
         with lock:
             current_fruits = []
@@ -159,9 +191,6 @@ if __name__ == "__main__":
             track = track_history[track_id]
             points = np.array([(p[0], p[1]) for p in track], dtype=np.int32).reshape((-1, 1, 2))
             cv2.polylines(game_frame, [points], isClosed=False, color=(230, 230, 230), thickness=1)
-        draw_danger_zones(fruits = current_fruits,
-                                   game_frame = game_frame,
-                                   danger_zone_radius = danger_zone)
 
         # Clean up tracks that haven't been on screen for the last 5 seconds
         for track_id in list(track_history.keys()):
@@ -175,7 +204,11 @@ if __name__ == "__main__":
                 with lock:
                     del track_history[track_id]
 
-        # Display the annotated frame
+        game_frame = plot_game_frame(frame, current_fruits, class_ids)
+        draw_danger_zones(fruits=current_fruits,
+                          game_frame=game_frame,
+                          danger_zone_radius=danger_zone)
+
         cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
         cv2.imshow("GameFrame", game_frame)
         cv2.setWindowProperty("GameFrame", cv2.WND_PROP_TOPMOST, 1)

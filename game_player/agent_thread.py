@@ -22,66 +22,36 @@ def toggle_playing():
 
 keyboard.add_hotkey("s", toggle_playing)  # Bind 'S' key to toggle playing
 
-def predict_fruit_position(track_history, target_time_ms, max_distance=90):
+def predict_fruit_position(track_history, target_distance):
     """
-    Predicts the future (X, Y) position of a fruit using parabolic motion,
-    with an optional limit on how far the prediction can be from the current position.
+    Predicts the future (X, Y) position of a fruit based on its movement history,
+    assuming constant velocity.
 
     Parameters:
     - track_history: List of (X, Y, ms) tuples.
-    - target_time_ms: Time in the future to predict, in milliseconds.
-    - max_distance: Maximum allowed distance from the current position.
+    - target_distance: Distance to predict ahead.
 
     Returns:
     - (predicted_x, predicted_y): Future coordinates.
     """
-    if len(track_history) < 3:
-        return None  # Not enough data to fit a parabola
+    if len(track_history) < 2:
+        return None  # Need at least 2 points to determine direction
 
-    # Extract positions and timestamps
-    xs = []
-    ys = []
-    ts = []
+    # Get the last two positions
+    x1, y1, _ = track_history[-2]
+    x2, y2, _ = track_history[-1]
 
-    for x, y, t in track_history:
-        xs.append(x)
-        ys.append(y)
-        ts.append(t)
+    # Compute direction
+    dx, dy = x2 - x1, y2 - y1
+    length = np.hypot(dx, dy)
 
-    # Convert to numpy arrays
-    ts = np.array(ts, dtype=float)
-    xs = np.array(xs, dtype=float)
-    ys = np.array(ys, dtype=float)
+    if length == 0:
+        return x2, y2  # No movement, return the same position
 
-    # Normalize time
-    t0 = ts[-1]
-    ts -= t0
-    future_t = target_time_ms
+    # Scale direction to target distance
+    dx, dy = (dx / length) * target_distance, (dy / length) * target_distance
 
-    # Fit quadratic curves
-    coeffs_x = np.polyfit(ts, xs, 2)
-    coeffs_y = np.polyfit(ts, ys, 2)
-
-    # Predict position at future_t
-    raw_pred_x = np.polyval(coeffs_x, future_t)
-    raw_pred_y = np.polyval(coeffs_y, future_t)
-
-    # Clamp to max distance from last known point
-    last_x = xs[-1]
-    last_y = ys[-1]
-    dx = raw_pred_x - last_x
-    dy = raw_pred_y - last_y
-    dist = np.hypot(dx, dy)
-
-    if dist > max_distance:
-        scale = max_distance / dist
-        dx *= scale
-        dy *= scale
-
-    predicted_x = last_x + dx
-    predicted_y = last_y + dy
-
-    return predicted_x, predicted_y
+    return x2 + dx, y2 + dy
 
 draw_width = 2
 def draw_danger_zones(fruits, game_frame, danger_zone_radius):
@@ -94,25 +64,60 @@ def draw_danger_zones(fruits, game_frame, danger_zone_radius):
     return game_frame
 
 font = cv2.FONT_HERSHEY_SIMPLEX
-def plot_game_frame(game_frame, fruits, class_ids):
+def plot_game_frame(game_frame, fruits, class_ids, confidences):
     """ Annotates the game frame with bounding boxes and IDs. """
 
-    for fruit, class_id in zip(fruits, class_ids):
+    for fruit, class_id, conf in zip(fruits, class_ids, confidences):
         box, class_id, track_id = fruit
         color = (0, 255, 0) if class_id % 2 else (255, 0, 0)
-        text = "Fruit" if class_id % 2 else "Half"
+        text_label = "Fruit" if class_id % 2 else "Half"
         if class_id == 20:
             color = (0, 0, 255)
-            text = "Bomb"
-        text += f" {track_id}"
+            text_label = "Bomb"
+        text = f"{text_label} {track_id} - {conf * 100:.0f}%"
 
         x, y, w, h = map(int, box)
-        # Positions are middle of the box, move to top-left corner
         x -= w // 2
         y -= h // 2
+
+        # Draw bounding box
         cv2.rectangle(game_frame, (x, y), (x + w, y + h), color, draw_width)
-        cv2.putText(game_frame, text, (x, y - 5), font, 0.5, color, draw_width)
+
+        # Determine text size
+        font_scale = 0.5
+        thickness = 1
+        text_size, baseline = cv2.getTextSize(text, font, font_scale, thickness)
+        text_w, text_h = text_size
+
+        # Draw filled background rectangle for text
+        cv2.rectangle(game_frame, (x, y - text_h - 6), (x + text_w + 2, y), (0, 0, 0), -1)
+
+        # Draw text (white on black background)
+        cv2.putText(game_frame, text, (x + 1, y - 3), font, font_scale, (255, 255, 255), thickness)
+
     return game_frame
+
+def handle_vanishing_bombs(current_fruits, current_frame_bombs, last_frame_bombs, current_time, game_height, max_age_ms = 50):
+    # Extract current bomb track IDs for quick lookup
+    current_ids = {track_id for _, _, track_id, _ in current_frame_bombs}
+
+    for box, class_id, track_id, last_seen in last_frame_bombs:
+        if track_id not in current_ids:
+            age = current_time - last_seen
+            if age > max_age_ms:
+                continue
+
+            _, y, _, h = map(float, box)
+            bottom_edge = y + h
+            if bottom_edge >= (game_height-1):
+                continue    # Fruit exited the screen
+            
+            current_fruits.append((box, class_id, track_id))  # Re-add vanished bomb
+            current_frame_bombs.append((box, class_id, track_id, last_seen))
+
+    # Update last_frame_bombs to reflect current frame
+    last_frame_bombs.clear()
+    last_frame_bombs.extend(current_frame_bombs)
 
 
 if __name__ == "__main__":
@@ -130,11 +135,14 @@ if __name__ == "__main__":
     # Store the track history for each fruit
     track_history = defaultdict(lambda: [])
     current_fruits = []             # This includes bombs! where class id is 20
-    y_percentage_threshold = 0.22    # If fruits are below 10% of the screen, ignore them.
+    y_percentage_threshold = 0.15    # If fruits are below 10% of the screen, ignore them.
     game_frame = None
     danger_zone = 100   # Just a global value so that fruit tracker can plot it, action thread will change this later.
     bombs_ms_into_future = 100       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
                                     # This affects the dangerzone in the direction the bomb is moving.
+    max_age_ms = 25     # Maximum time (ms) to retain a vanished bomb before discarding it (helps with brief misdetections)
+
+    last_frame_bombs = []
 
     def track_fruits(self, screen, prev_FPS, time_ms, delta_time):
         global current_fruits, track_history, game_frame, danger_zone
@@ -145,9 +153,9 @@ if __name__ == "__main__":
         # Run YOLO tracking on the frame, persisting tracks between frames
         script_dir = os.path.dirname(os.path.abspath(__file__))
         tracker_path = os.path.join(script_dir, "custom_tracker.yaml")
-        resize_factor = 0.5  # Resize factor for faster processing
+        resize_factor = 1  # Resize factor for faster processing
         frame_small = cv2.resize(frame, (0, 0), fx=resize_factor, fy=resize_factor)
-        results = model.track(frame_small, persist=True, verbose=False, tracker=tracker_path)
+        results = model.track(frame_small, persist=True, conf=0.01, verbose=False, tracker=tracker_path)
 
         if results[0].boxes.id is None: # If no frames are detected
             cv2.setWindowTitle("GameFrame", f"FPS: {prev_FPS:.2f} - Counter: {time_ms:.2f} - dT: {delta_time:.2f} - Press Q to quit")
@@ -159,11 +167,18 @@ if __name__ == "__main__":
         boxes = boxes * (1 / resize_factor)  # Scale back to original size
         track_ids = results[0].boxes.id.int().cpu().tolist()
         class_ids = results[0].boxes.cls.int().cpu().tolist()
+        confidences = results[0].boxes.conf.cpu().tolist()
 
         orig_shape = frame.shape[:2]
 
+        current_frame_bombs = []
+        for box, track_id, class_id in zip(boxes, track_ids, class_ids):
+                if class_id == 20:
+                    current_frame_bombs.append((box, class_id, track_id, time_ms))
+
         with lock:
             current_fruits = []
+            handle_vanishing_bombs(current_fruits, current_frame_bombs, last_frame_bombs, time_ms, orig_shape[0], max_age_ms)
             new_bombs = []
             for box, track_id, class_id in zip(boxes, track_ids, class_ids):
                 x, y, w, h = map(float, box)
@@ -178,6 +193,7 @@ if __name__ == "__main__":
                 current_fruits.append([box, class_id, track_id])
 
                 if class_id == 20:
+                    current_frame_bombs.append((box, class_id, track_id, time_ms))
                     prediction = predict_fruit_position(track_history[track_id], bombs_ms_into_future)
                     if prediction is not None:
                         new_box = (int(prediction[0]), int(prediction[1]), w, h)
@@ -204,7 +220,7 @@ if __name__ == "__main__":
                 with lock:
                     del track_history[track_id]
 
-        game_frame = plot_game_frame(frame, current_fruits, class_ids)
+        game_frame = plot_game_frame(frame, current_fruits, class_ids, confidences)
         draw_danger_zones(fruits=current_fruits,
                           game_frame=game_frame,
                           danger_zone_radius=danger_zone)
@@ -219,7 +235,7 @@ if __name__ == "__main__":
         global current_fruits, track_history, game, game_frame, danger_zone
 
         # Calibration values:
-        game_frame_w_to_danger_zone_radius_ratio = 0.120
+        game_frame_w_to_danger_zone_radius_ratio = 0.125
         game_frame_w, game_frame_h = game.get_game_dimensions()
         danger_zone = int(game_frame_w * game_frame_w_to_danger_zone_radius_ratio)   # Radius around bombs in which we will not cut fruits
 

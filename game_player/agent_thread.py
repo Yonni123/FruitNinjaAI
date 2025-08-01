@@ -32,26 +32,34 @@ def predict_fruit_position(track_history, target_distance):
     - target_distance: Distance to predict ahead.
 
     Returns:
-    - (predicted_x, predicted_y): Future coordinates.
+    - (predicted_x, predicted_y): Future coordinates or None if not enough data.
     """
     if len(track_history) < 2:
         return None  # Need at least 2 points to determine direction
 
-    # Get the last two positions
-    x1, y1, _ = track_history[-2]
-    x2, y2, _ = track_history[-1]
+    # Start from the last position and go backward to find movement
+    idx2 = len(track_history) - 1
+    idx1 = idx2 - 1
 
-    # Compute direction
-    dx, dy = x2 - x1, y2 - y1
-    length = np.hypot(dx, dy)
+    while idx1 >= 0:
+        x1, y1, _ = track_history[idx1]
+        x2, y2, _ = track_history[idx2]
 
-    if length == 0:
-        return x2, y2  # No movement, return the same position
+        dx, dy = x2 - x1, y2 - y1
+        length = np.hypot(dx, dy)
 
-    # Scale direction to target distance
-    dx, dy = (dx / length) * target_distance, (dy / length) * target_distance
+        if length > 0:
+            # Movement found, predict next position
+            dx, dy = (dx / length) * target_distance, (dy / length) * target_distance
+            return x2 + dx, y2 + dy
 
-    return x2 + dx, y2 + dy
+        # No movement, try older positions
+        idx2 = idx1
+        idx1 -= 1
+
+    # No movement found in entire history, return last known position
+    x_last, y_last, _ = track_history[-1]
+    return x_last, y_last
 
 draw_width = 2
 def draw_danger_zones(fruits, game_frame, danger_zone_radius):
@@ -77,6 +85,7 @@ def plot_game_frame(game_frame, fruits, class_ids, confidences):
         text = f"{text_label} {track_id} - {conf * 100:.0f}%"
 
         x, y, w, h = map(int, box)
+        cv2.circle(game_frame, (x, y), 4, (0, 0, 255), -1)  # red dot at center
         x -= w // 2
         y -= h // 2
 
@@ -135,12 +144,13 @@ if __name__ == "__main__":
     # Store the track history for each fruit
     track_history = defaultdict(lambda: [])
     current_fruits = []             # This includes bombs! where class id is 20
-    y_percentage_threshold = 0.15    # If fruits are below 10% of the screen, ignore them.
+    y_percentage_threshold = 0.20    # If fruits are below 20% of the screen, ignore them.
     game_frame = None
     danger_zone = 100   # Just a global value so that fruit tracker can plot it, action thread will change this later.
-    bombs_ms_into_future = 90       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
+    bombs_ms_into_future = 100       # How long into the future we want to predict the bomb. Too much could make it skip fruits.
                                     # This affects the dangerzone in the direction the bomb is moving.
-    max_age_ms = 25     # Maximum time (ms) to retain a vanished bomb before discarding it (helps with brief misdetections)
+    max_age_ms = 50     # Maximum time (ms) to retain a vanished bomb before discarding it (helps with brief misdetections)
+    resize_factor = 0.5  # Resize factor for faster processing
 
     last_frame_bombs = []
 
@@ -153,7 +163,6 @@ if __name__ == "__main__":
         # Run YOLO tracking on the frame, persisting tracks between frames
         script_dir = os.path.dirname(os.path.abspath(__file__))
         tracker_path = os.path.join(script_dir, "custom_tracker.yaml")
-        resize_factor = 1  # Resize factor for faster processing
         frame_small = cv2.resize(frame, (0, 0), fx=resize_factor, fy=resize_factor)
         results = model.track(frame_small, persist=True, conf=0.01, verbose=False, tracker=tracker_path)
 
@@ -227,7 +236,7 @@ if __name__ == "__main__":
     game = GameWrapper(track_fruits, monitor_index=0)
 
     # Calibration values:
-    game_frame_w_to_danger_zone_radius_ratio = 0.08
+    game_frame_w_to_danger_zone_radius_ratio = 0.095
     game_frame_w, game_frame_h = game.get_game_dimensions()
     danger_zone = int(game_frame_w * game_frame_w_to_danger_zone_radius_ratio)   # Radius around bombs in which we will not cut fruits
     wait_time_between_cuts = 0.20   # How long to wait between "cut groups". Triggered when there is a bomb present to be careful.
@@ -284,7 +293,7 @@ if __name__ == "__main__":
                     continue
 
                 spx, spy = map(float, game.game_to_screen_coords(prediction[0], prediction[1]))
-                pyautogui.moveTo(spx, spy, duration=0)
+                pyautogui.moveTo(spx, spy, duration=cut_duration)
                 pyautogui.mouseDown(button='left')
 
                 sx, sy = map(float, game.game_to_screen_coords(x, y))
